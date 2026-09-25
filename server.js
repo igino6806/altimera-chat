@@ -18,6 +18,9 @@ const MAX_HISTORY_PER_ROOM = 100;
 // In-memory úložisko miestností a používateľov (nič sa nezapisuje na disk)
 const rooms = new Map();
 
+// Zoznam všetkých registrovaných členov tímu (pre Signal-style kontakty)
+const allMembers = new Map();
+
 // Predvolená hlavná miestnosť
 rooms.set('main', {
   id: 'main',
@@ -41,9 +44,27 @@ app.get('/api/health', (req, res) => {
   });
 });
 
+function getAllMembersList() {
+  const list = [];
+  allMembers.forEach(m => {
+    let isOnline = false;
+    activeUsers.forEach(u => {
+      if (u.nickname.toLowerCase() === m.nickname.toLowerCase()) isOnline = true;
+    });
+    list.push({
+      nickname: m.nickname,
+      isOnline: isOnline,
+      lastSeen: m.lastSeen
+    });
+  });
+  return list;
+}
+
 function getRoomsSummary() {
   const list = [];
   rooms.forEach((r, id) => {
+    // DM miestnosti nezobrazujeme vo verejnom zozname skupín
+    if (r.isDM) return;
     let count = 0;
     activeUsers.forEach(u => {
       if (u.currentRoom === id) count++;
@@ -108,6 +129,13 @@ io.on('connection', (socket) => {
 
     const currentRoomObj = rooms.get(targetRoomId);
 
+    // Zaregistrovať do celkového zoznamu členov
+    allMembers.set(cleanNickname, {
+      nickname: cleanNickname,
+      isOnline: true,
+      lastSeen: Date.now()
+    });
+
     activeUsers.set(socket.id, {
       id: socket.id,
       nickname: cleanNickname,
@@ -117,14 +145,15 @@ io.on('connection', (socket) => {
 
     socket.join(targetRoomId);
 
-    // Odošleme úspešné prihlásenie s dátami miestnosti
+    // Odošleme úspešné prihlásenie s dátami miestnosti a všetkých členov
     socket.emit('auth_success', {
       nickname: cleanNickname,
       roomId: targetRoomId,
       roomName: currentRoomObj.name,
       history: currentRoomObj.history,
       members: getRoomMembers(targetRoomId),
-      roomsList: getRoomsSummary()
+      roomsList: getRoomsSummary(),
+      allMembersList: getAllMembersList()
     });
 
     // Upozorníme členov v danej miestnosti
@@ -134,8 +163,9 @@ io.on('connection', (socket) => {
       timestamp: Date.now()
     });
 
-    // Aktualizujeme zoznam miestností pre všetkých
+    // Aktualizujeme zoznam miestností a členov pre všetkých
     io.emit('rooms_updated', getRoomsSummary());
+    io.emit('all_members_updated', getAllMembersList());
 
     console.log(`[Auth] ${cleanNickname} vstúpil do skupiny '${currentRoomObj.name}' (${targetRoomId}).`);
   });
@@ -208,6 +238,43 @@ io.on('connection', (socket) => {
     io.emit('rooms_updated', getRoomsSummary());
   });
 
+  // 3b. Priamy 1-na-1 chat s konkrétnym členom Altimery (ako v Signali)
+  socket.on('open_dm', ({ targetNickname }) => {
+    const user = activeUsers.get(socket.id);
+    if (!user || !targetNickname) return;
+
+    const n1 = sanitizeId(user.nickname);
+    const n2 = sanitizeId(targetNickname);
+    const dmRoomId = 'dm-' + [n1, n2].sort().join('-');
+
+    if (!rooms.has(dmRoomId)) {
+      rooms.set(dmRoomId, {
+        id: dmRoomId,
+        name: targetNickname,
+        isDM: true,
+        participants: [user.nickname, targetNickname],
+        createdBy: user.nickname,
+        createdAt: Date.now(),
+        history: []
+      });
+    }
+
+    const oldRoomId = user.currentRoom;
+    socket.leave(oldRoomId);
+    user.currentRoom = dmRoomId;
+    socket.join(dmRoomId);
+
+    const roomObj = rooms.get(dmRoomId);
+    socket.emit('switched_room_success', {
+      roomId: dmRoomId,
+      roomName: targetNickname,
+      isDM: true,
+      targetUser: targetNickname,
+      history: roomObj.history,
+      members: [user.nickname, targetNickname]
+    });
+  });
+
   // 4. Zašifrované správy
   socket.on('send_encrypted_message', (data) => {
     const user = activeUsers.get(socket.id);
@@ -236,6 +303,21 @@ io.on('connection', (socket) => {
     }
 
     io.to(user.currentRoom).emit('new_message', messagePackage);
+
+    // Ak ide o súkromný 1-na-1 chat, upozorníme príjemcu aj v prípade, že je v inej miestnosti
+    if (currentRoomObj.isDM && currentRoomObj.participants) {
+      const recipient = currentRoomObj.participants.find(p => p.toLowerCase() !== user.nickname.toLowerCase());
+      if (recipient) {
+        activeUsers.forEach((u, sId) => {
+          if (u.nickname.toLowerCase() === recipient.toLowerCase() && u.currentRoom !== user.currentRoom) {
+            io.to(sId).emit('dm_incoming_notification', {
+              from: user.nickname,
+              dmRoomId: user.currentRoom
+            });
+          }
+        });
+      }
+    }
   });
 
   // 5. Indikátor písania
@@ -317,12 +399,21 @@ io.on('connection', (socket) => {
       const oldRoomId = user.currentRoom;
       socket.broadcast.emit('call_ended', { by: user.nickname, senderId: socket.id });
       activeUsers.delete(socket.id);
+
+      // Aktualizujeme stav v zozname všetkých členov
+      allMembers.set(user.nickname, {
+        nickname: user.nickname,
+        isOnline: false,
+        lastSeen: Date.now()
+      });
+
       socket.to(oldRoomId).emit('member_left', {
         nickname: user.nickname,
         members: getRoomMembers(oldRoomId),
         timestamp: Date.now()
       });
       io.emit('rooms_updated', getRoomsSummary());
+      io.emit('all_members_updated', getAllMembersList());
       console.log(`[Disconnect] ${user.nickname} opustil chat.`);
     }
   });
