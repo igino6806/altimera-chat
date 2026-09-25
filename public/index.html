@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="sk">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="theme-color" content="#0b0f19">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" type="image/svg+xml" href="icon.svg">
+  <link rel="apple-touch-icon" href="icon.svg">
+  <title>ALTIMERA // Secure Comms</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+</head>
+<body>
+  <!-- AUTH / LOGIN OVERLAY -->
+  <div id="authScreen" class="screen-container">
+    <div class="auth-card">
+      <div class="brand-header">
+        <div class="brand-logo-icon">
+          <svg viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
+          </svg>
+        </div>
+        <h1 class="brand-title">ALTIMERA</h1>
+        <div class="brand-badge">SECURE COMM PROTOCOL</div>
+      </div>
+
+      <p class="auth-subtitle">
+        Privátny šifrovaný kanál pre členov tímu Altimera. Správy sú chránené klientskym šifrovaním <strong>AES-256-GCM</strong>.
+      </p>
+
+      <div id="targetRoomBanner" class="target-room-banner hidden">
+        <span class="room-invite-tag">🔗 Pozvánka do skupiny:</span>
+        <strong id="targetRoomNameText">Hlavný Chat</strong>
+      </div>
+
+      <form id="authForm" class="auth-form">
+        <div class="form-group">
+          <label for="nicknameInput">Vaše meno / prezývka</label>
+          <input type="text" id="nicknameInput" placeholder="napr. Igor, Laci, Peter..." required autocomplete="name" maxlength="30" autofocus>
+        </div>
+
+        <div class="form-group">
+          <label for="pinInput">Bezpečnostný PIN tímu</label>
+          <div class="pin-input-wrapper">
+            <input type="password" id="pinInput" value="Altimera2026!" placeholder="Zadajte tajný tímový PIN" required autocomplete="current-password">
+            <button type="button" id="togglePinVisibility" class="btn-icon-subtle" title="Zobraziť PIN">👁️</button>
+          </div>
+          <span class="helper-text">Predvolený PIN: <code id="quickPinBadge" style="cursor:pointer;" title="Kliknutím vložiť">Altimera2026!</code> (kliknite pre vloženie)</span>
+        </div>
+
+        <div id="authErrorMessage" class="error-banner hidden"></div>
+
+        <button type="submit" id="btnEnter" class="btn-primary">
+          <span>Vstúpiť do chatu</span>
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>
+        </button>
+      </form>
+
+      <div class="security-highlights">
+        <div class="highlight-item">
+          <span class="hl-icon">🔒</span>
+          <span>Zero-Knowledge E2EE</span>
+        </div>
+        <div class="highlight-item">
+          <span class="hl-icon">⚡</span>
+          <span>In-Memory (bez zápisu na disk)</span>
+        </div>
+        <div class="highlight-item">
+          <span class="hl-icon">🛡️</span>
+          <span>Len overení členovia</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MAIN CHAT SCREEN -->
+  <div id="chatScreen" class="screen-container hidden">
+    <!-- TOP APP BAR -->
+    <header class="app-header">
+      <div class="header-left">
+        <div class="header-logo">ALTIMERA</div>
+        
+        <!-- ROOM SELECTOR / SWITCHER -->
+        <div class="room-selector-wrapper">
+          <button id="btnRoomSelector" class="header-room-btn" title="Prepnúť skupinu">
+            <span class="room-hash">#</span>
+            <span id="currentRoomDisplay">Hlavný Chat</span>
+            <span class="arrow-down">▾</span>
+          </button>
+          
+          <div id="roomsDropdown" class="rooms-dropdown hidden">
+            <div class="dropdown-header">
+              <span>Skupiny Altimery</span>
+              <button type="button" id="btnOpenCreateRoomModal" class="btn-create-room-small" title="Vytvoriť novú skupinu">➕ Nová skupina</button>
+            </div>
+            <ul id="roomsListElement" class="rooms-list">
+              <!-- Dynamicky generované skupiny -->
+            </ul>
+          </div>
+        </div>
+
+        <div class="security-status-pill desktop-only" title="End-to-End šifrovanie AES-256 je aktívne">
+          <span class="status-dot"></span>
+          <span class="status-text">AES-256</span>
+        </div>
+      </div>
+
+      <div class="header-actions">
+        <button id="btnInstallApp" class="header-btn btn-install hidden" title="Nainštalovať aplikáciu do telefónu alebo Macu">
+          <span>📲 Inštalovať</span>
+        </button>
+
+        <button id="btnEnableNotifications" class="header-btn" title="Zapnúť systémové notifikácie">
+          <span>🔔 Notifikácie</span>
+        </button>
+
+        <button id="btnShareInvite" class="header-btn btn-highlight" title="Kopírovať odkaz pre kolegov do tejto skupiny">
+          <span>🔗 Odkaz pre kolegov</span>
+        </button>
+
+        <button id="btnOnlineMembers" class="header-btn" title="Online členovia">
+          <span class="online-indicator"></span>
+          <span id="onlineCountBadge">1 online</span>
+        </button>
+
+        <button id="btnPanicWipe" class="header-btn btn-danger-subtle" title="Vymazať správy tejto skupiny">
+          <span>🗑️</span>
+        </button>
+
+        <button id="btnLogout" class="header-btn" title="Odhlásiť sa">
+          <span>Odísť</span>
+        </button>
+      </div>
+    </header>
+
+    <!-- CREATE ROOM MODAL -->
+    <div id="createRoomModal" class="modal-overlay hidden">
+      <div class="modal-card">
+        <div class="modal-header">
+          <h3>➕ Založiť nový skupinový chat</h3>
+          <button type="button" id="btnCloseCreateRoomModal" class="btn-close">×</button>
+        </div>
+        <form id="createRoomForm">
+          <div class="form-group">
+            <label for="newRoomNameInput">Názov skupinového chatu</label>
+            <input type="text" id="newRoomNameInput" placeholder="napr. Bukoza HUB, Projekt Šurany, Vedenie..." required maxlength="40" autofocus>
+          </div>
+          <p class="modal-hint">Táto skupina bude mať vlastné šifrované správy a vygeneruje sa pre ňu priamy link pre kolegov.</p>
+          <div class="modal-actions">
+            <button type="button" id="btnCancelCreateRoom" class="btn-secondary">Zrušiť</button>
+            <button type="submit" class="btn-primary">Vytvoriť a otvoriť</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- ONLINE USERS MODAL / PANEL -->
+    <div id="onlinePanel" class="online-panel hidden">
+      <div class="panel-header">
+        <h3>Aktívni v tejto skupine</h3>
+        <button id="btnCloseOnlinePanel" class="btn-close">×</button>
+      </div>
+      <ul id="onlineList" class="online-list">
+        <!-- Dynamicky plnené -->
+      </ul>
+    </div>
+
+    <!-- MESSAGES FEED -->
+    <main class="chat-main" id="chatMain">
+      <div class="encryption-notice-card">
+        <div class="notice-icon">🛡️</div>
+        <div class="notice-content">
+          <h4>Miestnosť je zabezpečená klientskym šifrovaním</h4>
+          <p>Tento kanál je prístupný výhradne členom s platným Altimera PIN-om. Každá správa a súbor je zašifrovaný na vašom zariadení pred odoslaním.</p>
+        </div>
+      </div>
+
+      <div id="messagesContainer" class="messages-container">
+        <!-- Správy sa vkladajú sem -->
+      </div>
+
+      <div id="typingIndicator" class="typing-indicator hidden">
+        <span class="typing-dots">
+          <span></span><span></span><span></span>
+        </span>
+        <span id="typingUserText">Niekto píše...</span>
+      </div>
+    </main>
+
+    <!-- MESSAGE INPUT AREA -->
+    <footer class="chat-footer">
+      <!-- PANEL NAHRÁVANIA HLASU -->
+      <div id="voiceRecordingBar" class="voice-recording-bar hidden">
+        <div class="voice-recording-indicator">
+          <span class="pulsing-red-dot"></span>
+          <span id="recordingTimer" class="recording-timer">0:00</span>
+          <span class="recording-label">Nahrávam hlas...</span>
+        </div>
+        <div class="voice-recording-actions">
+          <button type="button" id="btnCancelVoice" class="btn-cancel-voice" title="Zrušiť nahrávku">✕ Zrušiť</button>
+          <button type="button" id="btnSendVoice" class="btn-send-voice" title="Odoslať hlasovú správu">
+            <span>Odoslať 🚀</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- HLAVNÝ FORMULÁR SPRÁV -->
+      <form id="messageForm" class="message-form">
+        <input type="file" id="fileInput" class="hidden" accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.txt,.zip">
+        
+        <button type="button" id="btnAttachFile" class="btn-attach" title="Priložiť zašifrovaný súbor">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path>
+          </svg>
+        </button>
+
+        <button type="button" id="btnRecordVoice" class="btn-voice" title="Nahrať hlasovú správu">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
+            <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+            <line x1="12" y1="19" x2="12" y2="23"></line>
+            <line x1="8" y1="23" x2="16" y2="23"></line>
+          </svg>
+        </button>
+
+        <textarea 
+          id="messageInput" 
+          placeholder="Napíšte zabezpečenú správu... (Enter = odoslať, Shift+Enter = nový riadok)" 
+          rows="1"
+          maxlength="4000"
+        ></textarea>
+
+        <button type="submit" id="btnSend" class="btn-send" title="Odoslať správu">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5">
+            <line x1="22" y1="2" x2="11" y2="13"></line>
+            <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+          </svg>
+        </button>
+      </form>
+    </footer>
+  </div>
+
+  <!-- VIZUÁLNY NÁVOD PRE IPHONE INŠTALÁCIU -->
+  <div id="iosInstallPrompt" class="ios-install-prompt hidden">
+    <div class="ios-prompt-content">
+      <div class="ios-prompt-icon">📲</div>
+      <div class="ios-prompt-text">
+        <div class="ios-prompt-title">Chceš mať Altimeru na ploche ako WhatsApp?</div>
+        <div class="ios-prompt-desc">Ťukni dole na <strong>Zdieľať ⬆️</strong> a zvoľ <strong>„Pridať na plochu“ [+]</strong></div>
+      </div>
+      <button type="button" id="btnCloseIosPrompt" class="btn-close-prompt">✕</button>
+    </div>
+    <div class="ios-prompt-arrow">⬇️</div>
+  </div>
+
+  <!-- Klientske skripty -->
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="crypto.js"></script>
+  <script src="voice.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
