@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: altimera-secure-chat
+    env: node
+    plan: free
+    buildCommand: npm install
+    startCommand: node server.js
+    envVars:
+      - key: ROOM_PIN
+        value: Altimera2026!
+      - key: NODE_ENV
+        value: production
