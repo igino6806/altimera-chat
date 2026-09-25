@@ -55,6 +55,30 @@
   const btnPanicWipe = document.getElementById("btnPanicWipe");
   const btnLogout = document.getElementById("btnLogout");
 
+  // DOM Elements - Sidebar (Signal Style)
+  const btnToggleSidebar = document.getElementById("btnToggleSidebar");
+  const chatSidebar = document.getElementById("chatSidebar");
+  const sidebarBackdrop = document.getElementById("sidebarBackdrop");
+  const sidebarMyAvatar = document.getElementById("sidebarMyAvatar");
+  const sidebarMyName = document.getElementById("sidebarMyName");
+  const btnSidebarNewGroup = document.getElementById("btnSidebarNewGroup");
+  const sidebarSearchInput = document.getElementById("sidebarSearchInput");
+  const tabShowAll = document.getElementById("tabShowAll");
+  const tabShowGroups = document.getElementById("tabShowGroups");
+  const tabShowMembers = document.getElementById("tabShowMembers");
+  const sidebarGroupsSection = document.getElementById("sidebarGroupsSection");
+  const sidebarMembersSection = document.getElementById("sidebarMembersSection");
+  const sidebarRoomsList = document.getElementById("sidebarRoomsList");
+  const sidebarMembersList = document.getElementById("sidebarMembersList");
+  const sidebarGroupsCount = document.getElementById("sidebarGroupsCount");
+  const sidebarMembersCount = document.getElementById("sidebarMembersCount");
+
+  let cachedRoomsList = [];
+  let cachedMembersList = [];
+  const unreadCounts = new Map();
+  let sidebarFilterTab = "all";
+  let sidebarSearchQuery = "";
+
   // DOM Elements - Modal
   const createRoomModal = document.getElementById("createRoomModal");
   const createRoomForm = document.getElementById("createRoomForm");
@@ -314,7 +338,10 @@
 
       updateUrlParams(currentRoomId);
       updateMembersList(data.members);
+      if (data.roomsList) cachedRoomsList = data.roomsList;
+      if (data.allMembersList) cachedMembersList = data.allMembersList;
       renderRoomsList(data.roomsList);
+      renderSidebar();
 
       if (window.AltimeraCallManager) {
         window.AltimeraCallManager.initSocket(socket, currentNickname, currentRoomId);
@@ -332,17 +359,23 @@
     socket.on("switched_room_success", async (data) => {
       currentRoomId = data.roomId;
       currentRoomName = data.roomName;
-      currentRoomDisplay.textContent = currentRoomName;
+      if (data.isDM) {
+        currentRoomDisplay.textContent = `👤 ${data.roomName}`;
+      } else {
+        currentRoomDisplay.textContent = `# ${currentRoomName}`;
+      }
 
       updateUrlParams(currentRoomId);
       updateMembersList(data.members);
+      unreadCounts.delete(data.roomName);
+      renderSidebar();
 
       if (window.AltimeraCallManager) {
         window.AltimeraCallManager.setRoom(currentRoomId);
       }
 
       messagesContainer.innerHTML = "";
-      renderSystemMessage(`📂 Prepli ste sa do skupiny: ${currentRoomName}`);
+      renderSystemMessage(`📂 Prepli ste sa do: ${currentRoomName}`);
 
       if (data.history && data.history.length > 0) {
         for (const msgPkg of data.history) {
@@ -353,7 +386,22 @@
     });
 
     socket.on("rooms_updated", (roomsList) => {
+      cachedRoomsList = roomsList;
       renderRoomsList(roomsList);
+      renderSidebar();
+    });
+
+    socket.on("all_members_updated", (membersList) => {
+      cachedMembersList = membersList;
+      renderSidebar();
+    });
+
+    socket.on("dm_incoming_notification", ({ from, dmRoomId }) => {
+      playNotificationSound();
+      triggerSystemNotification(from, "Poslal vám novú správu", "direct");
+      const prev = unreadCounts.get(from) || 0;
+      unreadCounts.set(from, prev + 1);
+      renderSidebar();
     });
 
     socket.on("room_created", ({ roomId }) => {
@@ -440,6 +488,204 @@
       const li = document.createElement("li");
       li.textContent = m + (m === currentNickname ? " (vy)" : "");
       onlineList.appendChild(li);
+    });
+  }
+
+  // --- SIGNAL-STYLE SIDEBAR LOGIKA ---
+  function getInitials(name) {
+    if (!name) return "??";
+    const parts = name.trim().split(/\s+/);
+    if (parts.length >= 2) {
+      return (parts[0][0] + parts[1][0]).toUpperCase();
+    }
+    return name.slice(0, 2).toUpperCase();
+  }
+
+  function getAvatarColor(name) {
+    const gradients = [
+      "linear-gradient(135deg, #3b82f6, #1d4ed8)",
+      "linear-gradient(135deg, #10b981, #047857)",
+      "linear-gradient(135deg, #8b5cf6, #6d28d9)",
+      "linear-gradient(135deg, #f59e0b, #b45309)",
+      "linear-gradient(135deg, #ec4899, #be185d)",
+      "linear-gradient(135deg, #06b6d4, #0e7490)",
+      "linear-gradient(135deg, #14b8a6, #0f766e)"
+    ];
+    let hash = 0;
+    for (let i = 0; i < (name || "").length; i++) {
+      hash = name.charCodeAt(i) + ((hash << 5) - hash);
+    }
+    return gradients[Math.abs(hash) % gradients.length];
+  }
+
+  function renderSidebar() {
+    if (!sidebarRoomsList || !sidebarMembersList) return;
+
+    if (sidebarMyAvatar) {
+      sidebarMyAvatar.textContent = getInitials(currentNickname);
+      sidebarMyAvatar.style.background = getAvatarColor(currentNickname);
+    }
+    if (sidebarMyName) {
+      sidebarMyName.textContent = currentNickname || "Altimera";
+    }
+
+    const q = (sidebarSearchQuery || "").toLowerCase().trim();
+
+    // 1. Skupiny
+    sidebarRoomsList.innerHTML = "";
+    const filteredRooms = cachedRoomsList.filter(r => !q || r.name.toLowerCase().includes(q));
+    if (sidebarGroupsCount) sidebarGroupsCount.textContent = filteredRooms.length;
+
+    filteredRooms.forEach(r => {
+      const li = document.createElement("li");
+      li.className = "sidebar-item" + (r.id === currentRoomId ? " active" : "");
+      li.innerHTML = `
+        <div class="avatar-circle" style="background: rgba(6, 182, 212, 0.2); color: #06b6d4; border: 1px solid rgba(6, 182, 212, 0.3);">#</div>
+        <div class="sidebar-item-info">
+          <div class="sidebar-item-name">${r.name}</div>
+          <div class="sidebar-item-sub">${r.activeMembers} online</div>
+        </div>
+      `;
+      li.addEventListener("click", () => {
+        if (r.id !== currentRoomId) {
+          socket.emit("switch_room", { roomId: r.id });
+        }
+        closeSidebarMobile();
+      });
+      sidebarRoomsList.appendChild(li);
+    });
+
+    // 2. Členovia (Signal 1-na-1)
+    sidebarMembersList.innerHTML = "";
+    const otherMembers = cachedMembersList.filter(m => m.nickname.toLowerCase() !== currentNickname.toLowerCase());
+    const filteredMembers = otherMembers.filter(m => !q || m.nickname.toLowerCase().includes(q));
+
+    let onlineCount = otherMembers.filter(m => m.isOnline).length;
+    if (sidebarMembersCount) {
+      sidebarMembersCount.textContent = `${onlineCount} online`;
+    }
+
+    if (filteredMembers.length === 0) {
+      const emptyLi = document.createElement("li");
+      emptyLi.className = "sidebar-item";
+      emptyLi.style.cursor = "default";
+      emptyLi.innerHTML = `
+        <div class="sidebar-item-info">
+          <div class="sidebar-item-sub" style="text-align: center; padding: 0.5rem 0;">
+            ${q ? "Žiaden člen sa nenašiel." : "Zatiaľ tu nie sú iní členovia online.<br>Zdieľajte odkaz s kolegami!"}
+          </div>
+        </div>
+      `;
+      sidebarMembersList.appendChild(emptyLi);
+    } else {
+      filteredMembers.sort((a, b) => {
+        if (a.isOnline === b.isOnline) return a.nickname.localeCompare(b.nickname);
+        return a.isOnline ? -1 : 1;
+      });
+
+      filteredMembers.forEach(m => {
+        const li = document.createElement("li");
+        const isCurrentDM = currentRoomName.toLowerCase() === m.nickname.toLowerCase();
+        li.className = "sidebar-item" + (isCurrentDM ? " active" : "");
+        const unread = unreadCounts.get(m.nickname) || 0;
+
+        li.innerHTML = `
+          <div class="avatar-circle" style="background: ${getAvatarColor(m.nickname)}">
+            ${getInitials(m.nickname)}
+            <span class="${m.isOnline ? "avatar-online-dot" : "avatar-offline-dot"}" title="${m.isOnline ? "Online" : "Offline"}"></span>
+          </div>
+          <div class="sidebar-item-info">
+            <div class="sidebar-item-name">${m.nickname}</div>
+            <div class="sidebar-item-sub">${m.isOnline ? "🟢 Online" : "⚪ Offline"}</div>
+          </div>
+          ${unread > 0 ? `<span class="unread-badge">${unread}</span>` : ""}
+        `;
+
+        li.addEventListener("click", () => {
+          unreadCounts.delete(m.nickname);
+          socket.emit("open_dm", { targetNickname: m.nickname });
+          closeSidebarMobile();
+        });
+
+        sidebarMembersList.appendChild(li);
+      });
+    }
+
+    // Filtrovanie tabov
+    if (sidebarGroupsSection && sidebarMembersSection) {
+      if (sidebarFilterTab === "groups") {
+        sidebarGroupsSection.classList.remove("hidden");
+        sidebarMembersSection.classList.add("hidden");
+      } else if (sidebarFilterTab === "members") {
+        sidebarGroupsSection.classList.add("hidden");
+        sidebarMembersSection.classList.remove("hidden");
+      } else {
+        sidebarGroupsSection.classList.remove("hidden");
+        sidebarMembersSection.classList.remove("hidden");
+      }
+    }
+  }
+
+  function closeSidebarMobile() {
+    if (chatSidebar) chatSidebar.classList.remove("active");
+    if (sidebarBackdrop) sidebarBackdrop.classList.add("hidden");
+  }
+
+  // Sidebar Event Listeners
+  if (btnToggleSidebar) {
+    btnToggleSidebar.addEventListener("click", () => {
+      chatSidebar.classList.toggle("active");
+      sidebarBackdrop.classList.toggle("hidden");
+    });
+  }
+
+  if (sidebarBackdrop) {
+    sidebarBackdrop.addEventListener("click", closeSidebarMobile);
+  }
+
+  if (btnSidebarNewGroup) {
+    btnSidebarNewGroup.addEventListener("click", () => {
+      closeSidebarMobile();
+      createRoomModal.classList.remove("hidden");
+      newRoomNameInput.value = "";
+      newRoomNameInput.focus();
+    });
+  }
+
+  if (sidebarSearchInput) {
+    sidebarSearchInput.addEventListener("input", (e) => {
+      sidebarSearchQuery = e.target.value;
+      renderSidebar();
+    });
+  }
+
+  if (tabShowAll) {
+    tabShowAll.addEventListener("click", () => {
+      sidebarFilterTab = "all";
+      tabShowAll.classList.add("active");
+      tabShowGroups.classList.remove("active");
+      tabShowMembers.classList.remove("active");
+      renderSidebar();
+    });
+  }
+
+  if (tabShowGroups) {
+    tabShowGroups.addEventListener("click", () => {
+      sidebarFilterTab = "groups";
+      tabShowGroups.classList.add("active");
+      tabShowAll.classList.remove("active");
+      tabShowMembers.classList.remove("active");
+      renderSidebar();
+    });
+  }
+
+  if (tabShowMembers) {
+    tabShowMembers.addEventListener("click", () => {
+      sidebarFilterTab = "members";
+      tabShowMembers.classList.add("active");
+      tabShowAll.classList.remove("active");
+      tabShowGroups.classList.remove("active");
+      renderSidebar();
     });
   }
 
