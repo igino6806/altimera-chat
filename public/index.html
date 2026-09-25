@@ -111,6 +111,10 @@
       </div>
 
       <div class="header-actions">
+        <button id="btnStartCall" class="header-btn btn-call" title="Zavolať kolegom v tejto skupine (Hlasový hovor)">
+          <span>📞 Volať</span>
+        </button>
+
         <button id="btnInstallApp" class="header-btn btn-install hidden" title="Nainštalovať aplikáciu do telefónu alebo Macu">
           <span>📲 Inštalovať</span>
         </button>
@@ -243,6 +247,38 @@
         </button>
       </form>
     </footer>
+    <!-- ACTIVE CALL FLOATING BAR -->
+    <div id="activeCallBanner" class="active-call-bar hidden">
+      <div class="call-info">
+        <span class="pulsing-call-dot"></span>
+        <span id="callPartnerText" class="call-partner">Hovor: ...</span>
+        <span id="callTimerText" class="call-timer">00:00</span>
+      </div>
+      <div class="call-controls">
+        <button type="button" id="btnMuteMic" class="btn-call-ctrl" title="Stlmiť mikrofón">
+          <span>🎙️ Stlmiť</span>
+        </button>
+        <button type="button" id="btnEndCall" class="btn-call-ctrl btn-call-end" title="Zložiť hovor">
+          <span>🛑 Zložiť</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- INCOMING CALL MODAL -->
+    <div id="incomingCallModal" class="modal-overlay hidden">
+      <div class="modal-card incoming-call-card">
+        <div class="incoming-call-icon">📞</div>
+        <h3 id="incomingCallerText">Prichádzajúci hovor...</h3>
+        <p class="modal-hint">End-to-End šifrovaný hlasový hovor v reálnom čase</p>
+        <div class="incoming-call-actions">
+          <button type="button" id="btnRejectCall" class="btn-call-reject">❌ Odmietnuť</button>
+          <button type="button" id="btnAcceptCall" class="btn-call-accept">📞 Prijať hovor</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- HIDDEN AUDIO PRE PRICHÁDZAJÚCI HLAS -->
+    <audio id="remoteAudio" autoplay playsinline></audio>
   </div>
 
   <!-- VIZUÁLNY NÁVOD PRE IPHONE INŠTALÁCIU -->
@@ -262,6 +298,7 @@
   <script src="/socket.io/socket.io.js"></script>
   <script src="crypto.js"></script>
   <script src="voice.js"></script>
+  <script src="call.js"></script>
   <script src="app.js"></script>
 </body>
 </html>
