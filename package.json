@@ -1,0 +1,17 @@
+{
+  "name": "altimera-secure-chat",
+  "version": "1.0.0",
+  "description": "Bezpečný, end-to-end šifrovaný interný komunikátor pre tím Altimera",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "keywords": ["chat", "security", "e2ee", "altimera", "private"],
+  "author": "Altimera",
+  "license": "ISC",
+  "dependencies": {
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "socket.io": "^4.8.1"
+  }
+}
