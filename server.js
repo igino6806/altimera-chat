@@ -263,11 +263,59 @@ io.on('connection', (socket) => {
     });
   });
 
+  // --- WEBRTC HLASOVÉ VOLANIE (SIGNALING) ---
+  socket.on('call_start', ({ roomId }) => {
+    const user = activeUsers.get(socket.id);
+    if (!user) return;
+    const targetRoomId = user.currentRoom || roomId;
+    socket.to(targetRoomId).emit('incoming_call', {
+      caller: user.nickname,
+      callerId: socket.id,
+      roomId: targetRoomId
+    });
+  });
+
+  socket.on('call_accept', ({ callerId }) => {
+    const user = activeUsers.get(socket.id);
+    if (!user) return;
+    io.to(callerId).emit('call_accepted', {
+      callee: user.nickname,
+      calleeId: socket.id
+    });
+  });
+
+  socket.on('call_reject', ({ callerId }) => {
+    const user = activeUsers.get(socket.id);
+    if (!user) return;
+    io.to(callerId).emit('call_rejected', {
+      callee: user.nickname,
+      calleeId: socket.id
+    });
+  });
+
+  socket.on('call_signal', ({ targetId, signal }) => {
+    io.to(targetId).emit('call_signal', {
+      senderId: socket.id,
+      signal
+    });
+  });
+
+  socket.on('call_end', ({ targetId, roomId }) => {
+    const user = activeUsers.get(socket.id);
+    const byName = user ? user.nickname : 'Účastník';
+    if (targetId) {
+      io.to(targetId).emit('call_ended', { by: byName });
+    } else if (roomId) {
+      socket.to(roomId).emit('call_ended', { by: byName });
+    }
+  });
+
   // 7. Odpojenie
   socket.on('disconnect', () => {
     const user = activeUsers.get(socket.id);
     if (user) {
       const oldRoomId = user.currentRoom;
+      socket.broadcast.emit('call_ended', { by: user.nickname, senderId: socket.id });
       activeUsers.delete(socket.id);
       socket.to(oldRoomId).emit('member_left', {
         nickname: user.nickname,
