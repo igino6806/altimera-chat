@@ -43,6 +43,7 @@
   const roomsListElement = document.getElementById("roomsListElement");
   const btnOpenCreateRoomModal = document.getElementById("btnOpenCreateRoomModal");
   const btnShareInvite = document.getElementById("btnShareInvite");
+  const btnStartCall = document.getElementById("btnStartCall");
   const btnInstallApp = document.getElementById("btnInstallApp");
   const btnEnableNotifications = document.getElementById("btnEnableNotifications");
 
@@ -315,6 +316,10 @@
       updateMembersList(data.members);
       renderRoomsList(data.roomsList);
 
+      if (window.AltimeraCallManager) {
+        window.AltimeraCallManager.initSocket(socket, currentNickname, currentRoomId);
+      }
+
       messagesContainer.innerHTML = "";
       if (data.history && data.history.length > 0) {
         for (const msgPkg of data.history) {
@@ -331,6 +336,10 @@
 
       updateUrlParams(currentRoomId);
       updateMembersList(data.members);
+
+      if (window.AltimeraCallManager) {
+        window.AltimeraCallManager.setRoom(currentRoomId);
+      }
 
       messagesContainer.innerHTML = "";
       renderSystemMessage(`📂 Prepli ste sa do skupiny: ${currentRoomName}`);
@@ -836,6 +845,14 @@
   }
 
   // 11. PANIC WIPE & ODHLÁSENIE
+  if (btnStartCall) {
+    btnStartCall.addEventListener("click", () => {
+      if (window.AltimeraCallManager) {
+        window.AltimeraCallManager.startCall();
+      }
+    });
+  }
+
   btnPanicWipe.addEventListener("click", () => {
     const confirmed = confirm(`⚠️ Naozaj chcete vymazať celú históriu správ v skupine „${currentRoomName}“?`);
     if (confirmed && socket) {
